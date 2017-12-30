@@ -20,15 +20,22 @@ from tensorflow.python.ops import variable_scope as vs
 from tensorflow.python.ops.rnn_cell_impl import _RNNCell as RNNCell
 
 
-# TODO(@therealjtgill) All single-character variable names need to be changed
-# to something more descriptive. Add a note in the code stating how variable
-# names map to the variables used in the paper.
+# TODO(@therealjtgill) Add a note in the code stating how variable names map
+# to the variables used in the paper.
 class NTMCell(RNNCell):
   '''
-  An NTMCell that inherits from RNNCell. This inheritance was used to exploit
-  the RNNCell's ability to be called by the dynamic_rnn() method, meaning
-  that no custom code had to be implemented to perform dynamic unrollings of
-  sequences with arbitrary lengths.
+  This is a basic Neural Turing Machine recurrent cell with a single read
+  head.
+
+  Implementation based on: https://arxiv.org/abs/1410.5401
+
+  The NTM's initial state can be created using the built-in bias_state method
+  which fills the memory matrix with random values and initializes the read
+  and write vectors with one-hot vectors whose hotness is randomly specified.
+
+  If you want to create your own initial state, it is recommended that you make
+  the elements of the read and write heads sum to one and making the memory
+  matrix values non-zero.
   '''
 
   def __init__(self, mem_size, num_shifts=3):
@@ -40,9 +47,10 @@ class NTMCell(RNNCell):
   def state_size(self):
     '''
     State includes the memory matrix, and address vectors for the read
-    and write heads. These values influence the matrix and addresses at
-    the next time step.
+    and write addresses, respectively. These values influence the matrix and
+    addresses at the next time step.
     '''
+
     return self.num_slots*(self.num_bits,) + (self.num_slots, self.num_slots)
 
   @property
@@ -50,6 +58,7 @@ class NTMCell(RNNCell):
     '''
     Return only the size of the value that's read from the memory matrix.
     '''
+
     return self.num_bits
 
   def __call__(self, inputs, state, scope=None):
@@ -62,7 +71,7 @@ class NTMCell(RNNCell):
     length T.
 
     Arguments:
-      inputs - A tensor of input values [BxL1] from some piece of the
+      inputs - Rank(2) tensor of input values [BxL1] from some piece of the
         sequence being fed into the entire recurrent unit.
       state - A tuple of tensor values consisting of the recurrent state
         from the previous timestep. The recurrent state consists of:
@@ -73,7 +82,7 @@ class NTMCell(RNNCell):
     Returns:
       reads - Tensor of values that were read from the memory matrix.
       state_tuple - Tuple containing tensors relating to the recurrent
-        state.
+        state (see state_size property for more information).
     '''
 
     num_bits = self.num_bits
@@ -121,7 +130,7 @@ class NTMCell(RNNCell):
       bias_state - Tuple of numpy arrays containing the initial state for
         the RNNCell. There are N numpy arrays of size M for each memory
         location, and two numpy arrays of size N representing an initial
-        value for the read and write vectors.
+        value for the read and write addresses, respectively.
     '''
     state_size = self.state_size
     start_bias = int(rand()*self.num_slots/2.)
@@ -156,8 +165,15 @@ class NTMCell(RNNCell):
       axis - The axis of 'head' where splitting should occur. This is used
         for instances when 'head' is a rank 3 or rank 2 tensor. The default
         value is 1.
-        (This should be eliminated to perform splitting on the last axis
-        of the tensor... can probably be changed to '-1' without problems)
+        TODO(@therealjtgill) This should be eliminated to perform splitting
+        on the last axis of the tensor... can probably be changed to '-1'
+        without problems.
+
+    Returns:
+      write_head - A tuple of values that are used to generate the write
+        address (see Graves, et al, 2014).
+      read_head - A tuple of values that are used to generate the read address
+        (see Graves, et al, 2014).
     '''
     num_slots, num_bits = mem_size
     _ = num_slots
@@ -231,8 +247,8 @@ def head_pieces_tuple_to_dict(write_head, read_head):
 
 def cosine_similarity(vec_a, vec_b):
   '''
-  Computes the cosine similarity between tensors 'vec_a' and 'vec_b'. This
-  method assumes that rank(vec_a) = rank(vec_b) = 1.
+  Computes the cosine similarity between tensors vec_a and vec_b. Assumes
+  that rank(vec_a) = rank(vec_b) = 1.
 
   Arguments:
     vec_a - Rank(1) tensor.
@@ -240,7 +256,7 @@ def cosine_similarity(vec_a, vec_b):
 
   Returns:
     cos_sim - Rank(0) tensor containing cosine similarities between tensors
-      'vec_a' and 'vec_b'.
+      vec_a and vec_b.
   '''
 
   dot = math_ops.reduce_sum(vec_a*vec_b, axis=1)
@@ -342,7 +358,7 @@ def generate_address(pieces, w_prev, mem_prev, num_slots, num_shifts):
 
   Returns:
     w - A batch of memory addresses of shape [BxN], where each address is
-      calculated according to the rules in the original NTM paper by Graves
+      calculated according to the rules in the original NTM paper by Graves,
       et al.
   '''
 
