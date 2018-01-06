@@ -1,3 +1,5 @@
+# Author: Jonathan Gill
+# Github: /therealjtgill
 '''
 Unit test for Neural Turing Machine contribution.
 '''
@@ -6,9 +8,11 @@ import tensorflow as tf
 from tensorflow.python.platform import test
 import numpy as np
 
-from ntm_cell import NTMCell
-from ntm_cell import address_regression
-from ntm_np_forward import numpy_forward_pass
+#from ntm_cell import NTMCell
+#from ntm_cell import address_regression as tf_address_regression
+from tensorflow.contrib.ntm.python.ops.ntm_cell import NTMCell
+from tensorflow.contrib.ntm.python.ops.ntm_cell import address_regression as tf_address_regression
+from ntm_np_forward import np_forward_pass
 from ntm_np_forward import head_pieces
 from ntm_np_forward import generate_address
 
@@ -17,6 +21,7 @@ class NTMRegression(object):
   '''
   A class that makes regression testing on the NTMCell easier
   '''
+  
   def __init__(self, mem_size, session, num_heads=1, shift_range=3,
                name="NTM"):
     '''
@@ -148,11 +153,11 @@ class NTMForwardPassTest(test.TestCase):
     seq_initial_state = tuple([x[0, :] for x in self.initial_state])
 
     self.np_read_addresses, self.np_write_addresses, self.np_reads = \
-      numpy_forward_pass(self.N,
-                         self.M,
-                         self.S,
-                         seq_initial_state,
-                         self.controller_output[0, :, :])
+      np_forward_pass(self.N,
+                      self.M,
+                      self.S,
+                      seq_initial_state,
+                      self.controller_output[0, :, :])
 
 
   def testTFAgainstNP(self):
@@ -316,12 +321,12 @@ class NTMForwardPassTest(test.TestCase):
       # all batch items at that time slice.
       tf_write_head, tf_read_head = \
         NTMCell.head_pieces(self.controller_output[:, 0, :], mem_size, self.S)
-      tf_read_ops_out = address_regression(tf_read_head,
+      tf_read_ops_out = tf_address_regression(tf_read_head,
                                            self.initial_state[-2],
                                            tf_mem_prev,
                                            self.N,
                                            self.S)
-      tf_write_ops_out = address_regression(tf_write_head[0:-2],
+      tf_write_ops_out = tf_address_regression(tf_write_head[0:-2],
                                             self.initial_state[-1],
                                             tf_mem_prev,
                                             self.N,
