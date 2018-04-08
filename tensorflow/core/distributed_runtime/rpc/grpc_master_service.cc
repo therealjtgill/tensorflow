@@ -47,11 +47,11 @@ namespace tensorflow {
 
 class GrpcMasterService : public AsyncServiceInterface {
  public:
-  GrpcMasterService(Master* master, int64 default_timeout_in_ms,
+  GrpcMasterService(Master* master, const ConfigProto& default_session_config,
                     ::grpc::ServerBuilder* builder)
       : master_impl_(master),
-        default_timeout_in_ms_(default_timeout_in_ms),
-        is_shutdown_(false) {
+        is_shutdown_(false),
+        default_session_config_(default_session_config) {
     builder->RegisterService(&master_service_);
     cq_ = builder->AddCompletionQueue();
   }
@@ -129,12 +129,12 @@ class GrpcMasterService : public AsyncServiceInterface {
 
  private:
   Master* master_impl_ = nullptr;  // Not owned.
-  const int64 default_timeout_in_ms_;
   std::unique_ptr<::grpc::ServerCompletionQueue> cq_;
   grpc::MasterService::AsyncService master_service_;
 
   mutex mu_;
   bool is_shutdown_ GUARDED_BY(mu_);
+  const ConfigProto default_session_config_;
   ::grpc::Alarm* shutdown_alarm_ = nullptr;
 
   template <class RequestMessage, class ResponseMessage>
@@ -144,9 +144,13 @@ class GrpcMasterService : public AsyncServiceInterface {
   // RPC handler for creating a session.
   void CreateSessionHandler(
       MasterCall<CreateSessionRequest, CreateSessionResponse>* call) {
-    master_impl_->CreateSession(&call->request, &call->response,
-                                [call](const Status& status) {
+    CreateSessionRequest* rewritten_req = new CreateSessionRequest;
+    rewritten_req->mutable_config()->MergeFrom(default_session_config_);
+    rewritten_req->MergeFrom(call->request);
+    master_impl_->CreateSession(rewritten_req, &call->response,
+                                [call, rewritten_req](const Status& status) {
                                   call->SendResponse(ToGrpcStatus(status));
+                                  delete rewritten_req;
                                 });
     ENQUEUE_REQUEST(CreateSession, true);
   }
@@ -178,30 +182,29 @@ class GrpcMasterService : public AsyncServiceInterface {
     if (call->request.options().timeout_in_ms() > 0) {
       call_opts->SetTimeout(call->request.options().timeout_in_ms());
     } else {
-      call_opts->SetTimeout(default_timeout_in_ms_);
+      call_opts->SetTimeout(default_session_config_.operation_timeout_in_ms());
     }
     RunStepRequestWrapper* wrapped_request =
         new ProtoRunStepRequest(&call->request);
     MutableRunStepResponseWrapper* wrapped_response =
         new NonOwnedProtoRunStepResponse(&call->response);
     call->SetCancelCallback([call_opts]() { call_opts->StartCancel(); });
-    master_impl_->RunStep(call_opts, wrapped_request, wrapped_response,
-                          [call, call_opts, wrapped_request, wrapped_response,
-                           trace](const Status& status) {
-                            call->ClearCancelCallback();
-                            delete call_opts;
-                            delete wrapped_request;
-                            delete trace;
-                            if (call->request.store_errors_in_response_body() &&
-                                !status.ok()) {
-                              call->response.set_status_code(status.code());
-                              call->response.set_status_error_message(
-                                  status.error_message());
-                              call->SendResponse(ToGrpcStatus(Status::OK()));
-                            } else {
-                              call->SendResponse(ToGrpcStatus(status));
-                            }
-                          });
+    master_impl_->RunStep(
+        call_opts, wrapped_request, wrapped_response,
+        [call, call_opts, wrapped_request, wrapped_response,
+         trace](const Status& status) {
+          call->ClearCancelCallback();
+          delete call_opts;
+          delete wrapped_request;
+          delete trace;
+          if (call->request.store_errors_in_response_body() && !status.ok()) {
+            call->response.set_status_code(status.code());
+            call->response.set_status_error_message(status.error_message());
+            call->SendResponse(ToGrpcStatus(Status::OK()));
+          } else {
+            call->SendResponse(ToGrpcStatus(status));
+          }
+        });
     ENQUEUE_REQUEST(RunStep, true);
   }
 
@@ -250,10 +253,10 @@ class GrpcMasterService : public AsyncServiceInterface {
   TF_DISALLOW_COPY_AND_ASSIGN(GrpcMasterService);
 };
 
-AsyncServiceInterface* NewGrpcMasterService(Master* master,
-                                            int64 default_timeout_in_ms,
-                                            ::grpc::ServerBuilder* builder) {
-  return new GrpcMasterService(master, default_timeout_in_ms, builder);
+AsyncServiceInterface* NewGrpcMasterService(
+    Master* master, const ConfigProto& default_session_config,
+    ::grpc::ServerBuilder* builder) {
+  return new GrpcMasterService(master, default_session_config, builder);
 }
 
 }  // end namespace tensorflow

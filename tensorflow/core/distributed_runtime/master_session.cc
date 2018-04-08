@@ -66,13 +66,13 @@ class MasterSession::ReffedClientGraph : public core::RefCounted {
                     std::unique_ptr<ClientGraph> cg,
                     const SessionOptions& session_opts,
                     const StatsPublisherFactory& stats_publisher_factory,
-                    GraphExecutionState* execution_state, bool is_partial,
-                    WorkerCacheInterface* worker_cache, bool should_deregister)
+                    bool is_partial, WorkerCacheInterface* worker_cache,
+                    bool should_deregister)
       : session_handle_(handle),
         client_graph_(std::move(cg)),
         session_opts_(session_opts),
         is_partial_(is_partial),
-        debug_opts_(bopts.debug_options),
+        debug_opts_(bopts.callable_options.run_options().debug_options()),
         worker_cache_(worker_cache),
         should_deregister_(should_deregister) {
     VLOG(1) << "Created ReffedClientGraph for node with "
@@ -80,8 +80,8 @@ class MasterSession::ReffedClientGraph : public core::RefCounted {
 
     stats_publisher_ = stats_publisher_factory(handle, bopts, session_opts);
 
-    // Initialize a name to node map for testing that fetches are reachable.
-    for (Node* n : execution_state->full_graph()->nodes()) {
+    // Initialize a name to node map for processing device stats.
+    for (Node* n : client_graph_->graph.nodes()) {
       name_to_node_.insert({n->name(), n});
     }
   }
@@ -829,8 +829,6 @@ void MasterSession::ReffedClientGraph::ProcessDeviceStats(
 // TODO(suharsh,mrry): Build a map from fetch target to set of feeds it depends
 // on once at setup time to prevent us from computing the dependencies
 // everytime.
-// TODO(suharshs,mrry): Consider removing the need for execution_state to reduce
-// contention.
 Status MasterSession::ReffedClientGraph::CheckFetches(
     const RunStepRequestWrapper& req, const RunState* run_state,
     GraphExecutionState* execution_state) {
@@ -840,8 +838,8 @@ Status MasterSession::ReffedClientGraph::CheckFetches(
     // Skip if already fed.
     if (input.second) continue;
     TensorId id(ParseTensorName(input.first));
-    const auto it = name_to_node_.find(id.first);
-    if (it == name_to_node_.end()) {
+    const Node* n = execution_state->get_node_by_name(id.first.ToString());
+    if (n == nullptr) {
       return errors::NotFound("Feed ", input.first, ": not found");
     }
     pending_feeds.insert(id);
@@ -856,11 +854,11 @@ Status MasterSession::ReffedClientGraph::CheckFetches(
   for (size_t i = 0; i < req.num_fetches(); ++i) {
     const string& fetch = req.fetch_name(i);
     const TensorId id(ParseTensorName(fetch));
-    auto it = name_to_node_.find(id.first);
-    if (it == name_to_node_.end()) {
+    const Node* n = execution_state->get_node_by_name(id.first.ToString());
+    if (n == nullptr) {
       return errors::NotFound("Fetch ", fetch, ": not found");
     }
-    stack.push_back(it->second);
+    stack.push_back(n);
   }
 
   // Any tensor needed for fetches can't be in pending_feeds.
@@ -921,61 +919,70 @@ void MasterSession::ReffedClientGraph::DeregisterPartitions() {
   }
 }
 
+namespace {
+void CopyAndSortStrings(size_t size,
+                        const std::function<string(size_t)>& input_accessor,
+                        protobuf::RepeatedPtrField<string>* output) {
+  std::vector<string> temp;
+  temp.reserve(size);
+  for (size_t i = 0; i < size; ++i) {
+    output->Add(input_accessor(i));
+  }
+  std::sort(output->begin(), output->end());
+}
+}  // namespace
+
 void BuildBuildGraphOptions(const RunStepRequestWrapper& req,
                             BuildGraphOptions* opts) {
-  for (size_t i = 0; i < req.num_feeds(); ++i) {
-    opts->feed_endpoints.push_back(req.feed_name(i));
-  }
-  for (size_t i = 0; i < req.num_fetches(); ++i) {
-    opts->fetch_endpoints.push_back(req.fetch_name(i));
-  }
-  for (size_t i = 0; i < req.num_targets(); ++i) {
-    opts->target_nodes.push_back(req.target_name(i));
-  }
+  CallableOptions* callable_opts = &opts->callable_options;
+  CopyAndSortStrings(req.num_feeds(),
+                     [&req](size_t i) { return req.feed_name(i); },
+                     callable_opts->mutable_feed());
+  CopyAndSortStrings(req.num_fetches(),
+                     [&req](size_t i) { return req.fetch_name(i); },
+                     callable_opts->mutable_fetch());
+  CopyAndSortStrings(req.num_targets(),
+                     [&req](size_t i) { return req.target_name(i); },
+                     callable_opts->mutable_target());
 
   if (!req.options().debug_options().debug_tensor_watch_opts().empty()) {
-    opts->debug_options = req.options().debug_options();
+    *callable_opts->mutable_run_options()->mutable_debug_options() =
+        req.options().debug_options();
   }
-
-  std::sort(opts->feed_endpoints.begin(), opts->feed_endpoints.end());
-  std::sort(opts->target_nodes.begin(), opts->target_nodes.end());
-  std::sort(opts->fetch_endpoints.begin(), opts->fetch_endpoints.end());
 }
 
 void BuildBuildGraphOptions(const PartialRunSetupRequest& req,
                             BuildGraphOptions* opts) {
-  for (const auto& feed : req.feed()) {
-    opts->feed_endpoints.push_back(feed);
-  }
-  for (const auto& fetch : req.fetch()) {
-    opts->fetch_endpoints.push_back(fetch);
-  }
-  for (const auto& target : req.target()) {
-    opts->target_nodes.push_back(target);
-  }
+  CallableOptions* callable_opts = &opts->callable_options;
+  CopyAndSortStrings(req.feed_size(), [&req](size_t i) { return req.feed(i); },
+                     callable_opts->mutable_feed());
+  CopyAndSortStrings(req.fetch_size(),
+                     [&req](size_t i) { return req.fetch(i); },
+                     callable_opts->mutable_fetch());
+  CopyAndSortStrings(req.target_size(),
+                     [&req](size_t i) { return req.target(i); },
+                     callable_opts->mutable_target());
 
   // TODO(cais): Add TFDBG support to partial runs.
-
-  std::sort(opts->feed_endpoints.begin(), opts->feed_endpoints.end());
-  std::sort(opts->target_nodes.begin(), opts->target_nodes.end());
-  std::sort(opts->fetch_endpoints.begin(), opts->fetch_endpoints.end());
 }
 
 uint64 HashBuildGraphOptions(const BuildGraphOptions& opts) {
   uint64 h = 0x2b992ddfa23249d6ull;
-  for (const string& name : opts.feed_endpoints) {
+  for (const string& name : opts.callable_options.feed()) {
     h = Hash64(name.c_str(), name.size(), h);
   }
-  for (const string& name : opts.target_nodes) {
+  for (const string& name : opts.callable_options.target()) {
     h = Hash64(name.c_str(), name.size(), h);
   }
-  for (const string& name : opts.fetch_endpoints) {
+  for (const string& name : opts.callable_options.fetch()) {
     h = Hash64(name.c_str(), name.size(), h);
   }
 
-  if (!opts.debug_options.debug_tensor_watch_opts().empty()) {
-    const string watch_summary = SummarizeDebugTensorWatches(
-        opts.debug_options.debug_tensor_watch_opts());
+  const DebugOptions& debug_options =
+      opts.callable_options.run_options().debug_options();
+  if (!debug_options.debug_tensor_watch_opts().empty()) {
+    const string watch_summary =
+        SummarizeDebugTensorWatches(debug_options.debug_tensor_watch_opts());
     h = Hash64(watch_summary.c_str(), watch_summary.size(), h);
   }
 
@@ -984,15 +991,15 @@ uint64 HashBuildGraphOptions(const BuildGraphOptions& opts) {
 
 string BuildGraphOptionsString(const BuildGraphOptions& opts) {
   string buf;
-  for (const string& name : opts.feed_endpoints) {
+  for (const string& name : opts.callable_options.feed()) {
     strings::StrAppend(&buf, " FdE: ", name);
   }
   strings::StrAppend(&buf, "\n");
-  for (const string& name : opts.target_nodes) {
+  for (const string& name : opts.callable_options.target()) {
     strings::StrAppend(&buf, " TN: ", name);
   }
   strings::StrAppend(&buf, "\n");
-  for (const string& name : opts.fetch_endpoints) {
+  for (const string& name : opts.callable_options.fetch()) {
     strings::StrAppend(&buf, " FeE: ", name);
   }
   strings::StrAppend(&buf, "\n");
@@ -1284,8 +1291,8 @@ Status MasterSession::StartStep(const BuildGraphOptions& opts, int64* count,
       WorkerCacheInterface* worker_cache = get_worker_cache();
       auto entry = new ReffedClientGraph(
           handle_, opts, std::move(client_graph), session_opts_,
-          stats_publisher_factory_, execution_state_.get(), is_partial,
-          worker_cache, !should_delete_worker_sessions_);
+          stats_publisher_factory_, is_partial, worker_cache,
+          !should_delete_worker_sessions_);
       iter = m->insert({hash, entry}).first;
       VLOG(1) << "Preparing to execute new graph";
     }
@@ -1448,6 +1455,7 @@ Status MasterSession::DoPartialRun(CallOptions* opts,
     const auto count = run_state->count;
     pss.collect_timeline =
         req.options().trace_level() == RunOptions::FULL_TRACE;
+    pss.collect_rpcs = req.options().trace_level() == RunOptions::FULL_TRACE;
     pss.report_tensor_allocations_upon_oom =
         req.options().report_tensor_allocations_upon_oom();
 
@@ -1610,6 +1618,7 @@ Status MasterSession::DoRunWithLocalExecution(
   TRACEPRINTF("stepid %llu", step_id);
 
   pss.collect_timeline = req.options().trace_level() == RunOptions::FULL_TRACE;
+  pss.collect_rpcs = req.options().trace_level() == RunOptions::FULL_TRACE;
   pss.report_tensor_allocations_upon_oom =
       req.options().report_tensor_allocations_upon_oom();
   // Build the cost model every 'build_cost_model_every' steps after skipping an

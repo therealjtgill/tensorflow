@@ -26,6 +26,7 @@ limitations under the License.
 #include "tensorflow/core/framework/attr_value.pb.h"
 #include "tensorflow/core/framework/node_def.pb.h"
 #include "tensorflow/core/lib/core/errors.h"
+#include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/platform/mutex.h"
 #include "tensorflow/core/protobuf/master.pb.h"
 
@@ -330,7 +331,7 @@ Status GrpcSession::Close() {
   {
     mutex_lock l(mu_);
     if (handle_.empty()) {
-      return errors::InvalidArgument("A session is not created yet....");
+      return Status::OK();
     }
     req.set_session_handle(handle_);
     handle_.clear();
@@ -402,7 +403,7 @@ Status GrpcSession::Reset(const SessionOptions& options,
 class GrpcSessionFactory : public SessionFactory {
  public:
   bool AcceptsOptions(const SessionOptions& options) override {
-    return StringPiece(options.target).starts_with(kSchemePrefix);
+    return str_util::StartsWith(options.target, kSchemePrefix);
   }
 
   Session* NewSession(const SessionOptions& options) override {

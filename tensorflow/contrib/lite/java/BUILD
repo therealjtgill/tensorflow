@@ -7,6 +7,16 @@ licenses(["notice"])  # Apache 2.0
 
 load("//tensorflow/java:build_defs.bzl", "JAVACOPTS")
 load("//tensorflow/contrib/lite:build_def.bzl", "tflite_jni_binary")
+load("//tensorflow/contrib/lite/java:aar_with_jni.bzl", "aar_with_jni")
+
+# Building tensorflow-lite.aar including 4 variants of .so
+# To build an aar for release, run below command:
+# bazel build --cxxopt='--std=c++11' -c opt --fat_apk_cpu=x86,x86_64,arm64-v8a,armeabi-v7a \
+# tensorflow/contrib/lite/java:tensorflow-lite
+aar_with_jni(
+    name = "tensorflow-lite",
+    android_library = ":tensorflowlite",
+)
 
 android_library(
     name = "tensorflowlite",
@@ -15,10 +25,11 @@ android_library(
             "src/main/java/org/tensorflow/lite/*.java",
         ],
     ),
+    manifest = "AndroidManifest.xml",
     visibility = ["//visibility:public"],
     deps = [
         ":tflite_runtime",
-        "@javax_validation",
+        "@org_checkerframework_qual",
     ],
 )
 
@@ -31,7 +42,24 @@ android_library(
     ),
     visibility = ["//visibility:public"],
     deps = [
-        "@javax_validation",
+        "@org_checkerframework_qual",
+    ],
+)
+
+java_library(
+    name = "ovicbenchmarkerlib",
+    srcs = [
+        "ovic/src/main/java/org/tensorflow/ovic/OvicClassifier.java",
+        "ovic/src/main/java/org/tensorflow/ovic/OvicSingleImageResult.java",
+    ],
+    javacopts = JAVACOPTS,
+    visibility = ["//visibility:public"],
+    deps = [
+        ":libtensorflowlite_jni.so",
+        ":tensorflowlite_java",
+        "//tensorflow/contrib/lite/java/src/main/native",
+        "//tensorflow/contrib/lite/java/src/testhelper/java/org/tensorflow/lite:testhelper",
+        "@org_checkerframework_qual",
     ],
 )
 
@@ -47,7 +75,7 @@ java_library(
     deps = [
         ":libtensorflowlite_jni.so",
         "//tensorflow/contrib/lite/java/src/main/native",
-        "@javax_validation",
+        "@org_checkerframework_qual",
     ],
 )
 
@@ -100,6 +128,26 @@ java_test(
     ],
 )
 
+# TODO: generate large models at runtime, instead of storing them.
+java_test(
+    name = "InterpreterTest",
+    size = "small",
+    srcs = ["src/test/java/org/tensorflow/lite/InterpreterTest.java"],
+    data = [
+        "src/testdata/add.bin",
+        "src/testdata/mobilenet.tflite.bin",
+    ],
+    javacopts = JAVACOPTS,
+    test_class = "org.tensorflow.lite.InterpreterTest",
+    visibility = ["//visibility:private"],
+    deps = [
+        ":libtensorflowlite_jni.so",
+        ":tensorflowlitelib",
+        "@com_google_truth",
+        "@junit",
+    ],
+)
+
 java_test(
     name = "TensorTest",
     size = "small",
@@ -111,6 +159,28 @@ java_test(
     test_class = "org.tensorflow.lite.TensorTest",
     deps = [
         ":tensorflowlitelib",
+        "@com_google_truth",
+        "@junit",
+    ],
+)
+
+java_test(
+    name = "OvicClassifierTest",
+    size = "medium",
+    srcs = ["ovic/src/test/java/org/tensorflow/ovic/OvicClassifierTest.java"],
+    data = [
+        "ovic/src/testdata/float_model.lite",
+        "ovic/src/testdata/labels.txt",
+        "ovic/src/testdata/low_res_model.lite",
+        "ovic/src/testdata/quantized_model.lite",
+        "ovic/src/testdata/test_image_128.jpg",
+        "ovic/src/testdata/test_image_224.jpg",
+    ],
+    javacopts = JAVACOPTS,
+    test_class = "org.tensorflow.ovic.OvicClassifierTest",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":ovicbenchmarkerlib",
         "@com_google_truth",
         "@junit",
     ],
@@ -135,16 +205,4 @@ tflite_jni_binary(
     deps = [
         "//tensorflow/contrib/lite/java/src/main/native",
     ],
-)
-
-filegroup(
-    name = "all_files",
-    srcs = glob(
-        ["**/*"],
-        exclude = [
-            "**/METADATA",
-            "**/OWNERS",
-        ],
-    ),
-    visibility = ["//tensorflow:__subpackages__"],
 )
