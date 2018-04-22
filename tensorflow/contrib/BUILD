@@ -68,6 +68,7 @@ py_library(
         "//tensorflow/contrib/ndlstm",
         "//tensorflow/contrib/nearest_neighbor:nearest_neighbor_py",
         "//tensorflow/contrib/nn:nn_py",
+        "//tensorflow/contrib/ntm:ntm_py",
         "//tensorflow/contrib/opt:opt_py",
         "//tensorflow/contrib/periodic_resample:init_py",
         "//tensorflow/contrib/predictor",

@@ -516,6 +516,7 @@ filegroup(
         "//tensorflow/contrib/ndlstm:all_files",
         "//tensorflow/contrib/nearest_neighbor:all_files",
         "//tensorflow/contrib/nn:all_files",
+        "//tensorflow/contrib/ntm:all_files",
         "//tensorflow/contrib/opt:all_files",
         "//tensorflow/contrib/predictor:all_files",
         "//tensorflow/contrib/quantize:all_files",
