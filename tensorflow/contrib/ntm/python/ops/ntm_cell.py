@@ -11,7 +11,7 @@ import numpy as np
 from numpy.random import rand
 
 from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import gen_math_ops
+from tensorflow.python.ops import gen_math_ops # Can possibly get rid of this?
 from tensorflow.python.ops import linalg_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
