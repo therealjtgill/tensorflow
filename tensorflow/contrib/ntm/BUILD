@@ -60,11 +60,10 @@ tf_custom_op_py_library(
 )
 
 tf_py_test(
-    name = "fused_rnn_cell_test",
+    name = "ntm_cell_test",
     size = "small",
-    srcs = ["python/kernel_tests/fused_rnn_cell_test.py"],
+    srcs = ["python/kernel_tests/ntm_cell_test.py"],
     additional_deps = [
-        ":rnn_py",
         "//third_party/py/numpy",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:client_testlib",
@@ -77,5 +76,8 @@ tf_py_test(
         "//tensorflow/python:rnn_cell",
         "//tensorflow/python:variable_scope",
         "//tensorflow/python:variables",
+    	"//tensorflow/contrib/ntm/python/kernel_tests:ntm_np_forward"
     ],
 )
+
+# Need to define the ntm_np_forward library here
