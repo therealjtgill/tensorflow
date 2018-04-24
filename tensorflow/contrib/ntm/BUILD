@@ -59,6 +59,14 @@ tf_custom_op_py_library(
     ],
 )
 
+# Need to define the ntm_np_forward library here
+py_library(
+    name = "ntm_np_forward",
+    srcs = ["python/kernel_tests/ntm_np_forward.py"],
+    srcs_version = "PY2AND3",
+    deps = ["//third_party/py/numpy"],
+)
+
 tf_py_test(
     name = "ntm_cell_test",
     size = "small",
@@ -79,5 +87,3 @@ tf_py_test(
     	"//tensorflow/contrib/ntm/python/kernel_tests:ntm_np_forward"
     ],
 )
-
-# Need to define the ntm_np_forward library here
