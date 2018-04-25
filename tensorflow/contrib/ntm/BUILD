@@ -71,7 +71,6 @@ tf_py_test(
     name = "ntm_cell_test",
     size = "small",
     srcs = ["python/kernel_tests/ntm_cell_test.py"],
-    srcs_version = "PY2AND3",
     additional_deps = [
         "//third_party/py/numpy",
         "//tensorflow/python:array_ops",
