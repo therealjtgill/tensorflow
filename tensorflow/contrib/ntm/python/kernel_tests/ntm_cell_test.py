@@ -7,14 +7,19 @@ Unit test for Neural Turing Machine contribution.
 import tensorflow as tf
 from tensorflow.python.platform import test
 import numpy as np
-
 #from ntm_cell import NTMCell
 #from ntm_cell import address_regression as tf_address_regression
+#from tensorflow.contrib.ntm.python.ops.ntm_cell import NTMCell
+#from tensorflow.contrib.ntm.python.ops.ntm_cell import address_regression as tf_address_regression
+#from tensorflow.nn.rnn_cell import LSTMCell
 from tensorflow.contrib.ntm.python.ops.ntm_cell import NTMCell
+#from tensorflow.contrib.ntm import NTMCell
+#from tensorflow.contrib.rnn.python.ops import fused_rnn_cell
+#from tensorflow.contrib.ntm.python.ops import ntm_cell
 from tensorflow.contrib.ntm.python.ops.ntm_cell import address_regression as tf_address_regression
-from ntm_np_forward import np_forward_pass
-from ntm_np_forward import head_pieces
-from ntm_np_forward import generate_address
+from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import np_forward_pass
+from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import head_pieces
+from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import generate_address
 
 
 class NTMRegression(object):
@@ -360,7 +365,7 @@ class NTMForwardPassTest(test.TestCase):
       output = tf_regression_ntm.run(zero_controller, zero_state)
 
       for item in output:
-        #print(item[0])
+        print(item[0])
         self.assertNotIn(np.inf, item)
         self.assertNotIn(-np.inf, item)
         self.assertNotIn(np.nan, item)

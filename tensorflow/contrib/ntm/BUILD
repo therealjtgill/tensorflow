@@ -42,7 +42,7 @@ tf_custom_op_py_library(
 #        "//tensorflow/python:embedding_ops",
 #        "//tensorflow/python:framework_for_generated_wrappers",
 #        "//tensorflow/python:init_ops",
-        "//tensorflow/python:gen_math_ops",
+#        "//tensorflow/python:gen_math_ops",
         "//tensorflow/python:math_ops",
         "//tensorflow/python:nn_ops",
 #        "//tensorflow/python:platform",
@@ -50,7 +50,7 @@ tf_custom_op_py_library(
 #        "//tensorflow/python:random_ops",
         "//tensorflow/python:rnn",
         "//tensorflow/python:rnn_cell",
-        "//tensorflow/python:rnn_cell_impl",        
+#        "//tensorflow/python:rnn_cell_impl",        
 #        "//tensorflow/python:session",
 #        "//tensorflow/python:training",
 #        "//tensorflow/python:util",
@@ -62,7 +62,7 @@ tf_custom_op_py_library(
 # Need to define the ntm_np_forward library here
 py_library(
     name = "ntm_np_forward",
-    srcs = ["python/kernel_tests/ntm_np_forward.py"],
+    srcs = ["__init__.py", "python/kernel_tests/ntm_np_forward.py"],
     srcs_version = "PY2AND3",
     deps = ["//third_party/py/numpy"],
 )
@@ -72,6 +72,8 @@ tf_py_test(
     size = "small",
     srcs = ["python/kernel_tests/ntm_cell_test.py"],
     additional_deps = [
+        ":ntm_py",
+        ":ntm_np_forward",
         "//third_party/py/numpy",
         "//tensorflow/python:array_ops",
         "//tensorflow/python:client_testlib",
@@ -79,11 +81,13 @@ tf_py_test(
         "//tensorflow/python:framework_test_lib",
         "//tensorflow/python:gradients",
         "//tensorflow/python:init_ops",
+        "//tensorflow/python:math_ops",
+        "//tensorflow/python:nn_ops",
         "//tensorflow/python:platform_test",
         "//tensorflow/python:rnn",
         "//tensorflow/python:rnn_cell",
         "//tensorflow/python:variable_scope",
         "//tensorflow/python:variables",
-    	"//tensorflow/contrib/ntm/python/kernel_tests:ntm_np_forward"
+    	  #"//tensorflow/contrib/ntm/python/kernel_tests:ntm_np_forward"
     ],
 )
