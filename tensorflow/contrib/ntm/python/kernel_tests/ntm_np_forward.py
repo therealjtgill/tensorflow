@@ -180,7 +180,7 @@ def generate_address(pieces, w_prev, mem_prev, N, S):
     return w_c, w_i, w_shift, w_sharp
 
 
-def numpy_forward_pass(N, M, shift_range, initial_state, controller_output,
+def np_forward_pass(N, M, shift_range, initial_state, controller_output,
     out_directory='.'):
     # The numpy forward pass only works on vectors, not matrices. So the
     # initial state has to be broken down into individual vectors.

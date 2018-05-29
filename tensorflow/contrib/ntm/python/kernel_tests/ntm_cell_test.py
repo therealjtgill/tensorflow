@@ -4,7 +4,7 @@
 Unit test for Neural Turing Machine contribution.
 '''
 
-import tensorflow as tf
+#import tensorflow as tf
 from tensorflow.python.platform import test
 import numpy as np
 #from ntm_cell import NTMCell
@@ -12,14 +12,19 @@ import numpy as np
 #from tensorflow.contrib.ntm.python.ops.ntm_cell import NTMCell
 #from tensorflow.contrib.ntm.python.ops.ntm_cell import address_regression as tf_address_regression
 #from tensorflow.nn.rnn_cell import LSTMCell
+from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import rnn
+from tensorflow.python.framework import dtypes
 from tensorflow.contrib.ntm.python.ops.ntm_cell import NTMCell
 #from tensorflow.contrib.ntm import NTMCell
 #from tensorflow.contrib.rnn.python.ops import fused_rnn_cell
 #from tensorflow.contrib.ntm.python.ops import ntm_cell
 from tensorflow.contrib.ntm.python.ops.ntm_cell import address_regression as tf_address_regression
-from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import np_forward_pass
-from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import head_pieces
-from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import generate_address
+from tensorflow.contrib.ntm.python.kernel_tests import ntm_np_forward
+from tensorflow.python.ops import variable_scope
+#from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import nap_forward_pass
+#from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import head_pieces
+#from tensorflow.contrib.ntm.python.kernel_tests.ntm_np_forward import generate_address
 
 
 class NTMRegression(object):
@@ -40,27 +45,27 @@ class NTMRegression(object):
     self.num_heads = num_heads
 
     (num_slots, num_bits) = self.mem_size
-    dt = tf.float32
+    dt = dtypes.float32
 
     head_size = 4*num_bits + 2*self.shift_range + 6
 
-    with tf.variable_scope(name):
+    with variable_scope.variable_scope(name):
 
       self.ntm_cell = NTMCell(mem_size=self.mem_size,
                               num_shifts=self.shift_range)
 
       # [batch_size, sequence_length, 4*M + 2*S + 6]
       self.feed_controller_input = \
-        tf.placeholder(dtype=dt,
+        array_ops.placeholder(dtype=dt,
                        shape=(None, None, head_size))
 
       # ([batch_size, ntm_cell.state_size[0]], ...)
       self.feed_initial_state = \
-        tuple([tf.placeholder(dtype=dt, shape=(None, s))
+        tuple([array_ops.placeholder(dtype=dt, shape=(None, s))
                for s in self.ntm_cell.state_size])
 
       self.ntm_reads, self.ntm_last_state = \
-        tf.nn.dynamic_rnn(cell=self.ntm_cell,
+        rnn.dynamic_rnn(cell=self.ntm_cell,
                           initial_state=self.feed_initial_state,
                           inputs=self.feed_controller_input, dtype=dt)
 
@@ -158,7 +163,7 @@ class NTMForwardPassTest(test.TestCase):
     seq_initial_state = tuple([x[0, :] for x in self.initial_state])
 
     self.np_read_addresses, self.np_write_addresses, self.np_reads = \
-      np_forward_pass(self.N,
+      ntm_np_forward.np_forward_pass(self.N,
                       self.M,
                       self.S,
                       seq_initial_state,
@@ -240,7 +245,7 @@ class NTMForwardPassTest(test.TestCase):
     '''
 
     mem_size = (self.N, self.M)
-    np_read_head, np_write_head = head_pieces(self.controller_output,
+    np_read_head, np_write_head = ntm_np_forward.head_pieces(self.controller_output,
                                               mem_size,
                                               self.S)
 
@@ -301,20 +306,20 @@ class NTMForwardPassTest(test.TestCase):
     initial_memory = self.initial_state[0:-2]
     np_initial_read_address = self.initial_state[-2]
     np_initial_write_address = self.initial_state[-1]
-    tf_mem_prev = tf.stack(initial_memory, axis=1)
+    tf_mem_prev = array_ops.stack(initial_memory, axis=1)
     np_mem_prev = np.stack(initial_memory, axis=1)
     # Only want the first batch element and first time slice from the
     # controller output to produce the read and write head values from a
     # single timestep.
-    np_read_head, np_write_head = head_pieces(self.controller_output[0, 0, :],
+    np_read_head, np_write_head = ntm_np_forward.head_pieces(self.controller_output[0, 0, :],
                                               mem_size, self.S)
 
-    np_read_ops_out = generate_address(np_read_head,
+    np_read_ops_out = ntm_np_forward.generate_address(np_read_head,
                                        np_initial_read_address[0, :],
                                        np_mem_prev[0, :, :],
                                        self.N,
                                        self.S)
-    np_write_ops_out = generate_address(np_write_head[0:-2],
+    np_write_ops_out = ntm_np_forward.generate_address(np_write_head[0:-2],
                                         np_initial_write_address[0, :],
                                         np_mem_prev[0, :, :],
                                         self.N,
